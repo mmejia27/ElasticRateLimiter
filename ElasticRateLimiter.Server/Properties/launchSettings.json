@@ -1,0 +1,10 @@
+{
+  "profiles": {
+    "ElasticRateLimiter.Server": {
+      "commandName": "Project"
+    },
+    "Container (Dockerfile)": {
+      "commandName": "Docker"
+    }
+  }
+}
