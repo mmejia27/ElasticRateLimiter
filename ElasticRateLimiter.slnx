@@ -1,3 +1,5 @@
 <Solution>
+  <Project Path="ElasticRateLimiter.Core/ElasticRateLimiter.Core.csproj" />
+  <Project Path="ElasticRateLimiter.Raft/ElasticRateLimiter.Raft.csproj" />
   <Project Path="ElasticRateLimiter.Server/ElasticRateLimiter.Server.csproj" />
 </Solution>
