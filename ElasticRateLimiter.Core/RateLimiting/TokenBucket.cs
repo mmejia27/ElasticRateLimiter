@@ -8,7 +8,7 @@ namespace ElasticRateLimiter.Core.RateLimiting
     public class TokenBucket(Func<int> clusterSizeProvider, long capacity, int refillRate, int reservedTokens = 0, bool isUnlimited = false)
     {
         internal readonly Lock SyncRoot = new();
-        private long _availableTokens;
+        private long _availableTokens = capacity > 0 ? Math.Max(1, capacity / (clusterSizeProvider ?? (() => 1))()) : 0;
         private DateTime _lastRefillUtc = DateTime.UtcNow;
 
         private readonly Func<int> _clusterSize = clusterSizeProvider ?? (() => 1);
