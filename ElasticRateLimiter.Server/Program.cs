@@ -53,33 +53,32 @@ builder.Services.AddSingleton<TokenBucketStateMachine>(sp =>
     var logger = sp.GetRequiredService<ILogger<TokenBucketStateMachine>>();
     return new TokenBucketStateMachine(statePath, manager, logger);
 });
-
-// builder.Services.AddSingleton<IPersistentState>(sp => sp.GetRequiredService<TokenBucketStateMachine>());
-
-
-//builder.Host.JoinCluster();
-
+/* Cannot register the state machine due to it not implementing IPersistentState and documentation is sparse
+builder.Services.AddSingleton<IPersistentState>(sp => sp.GetRequiredService<TokenBucketStateMachine>());
+builder.Host.JoinCluster();
+*/
 var app = builder.Build();
 
-//app.UseConsensusProtocolHandler();
+/* Part of the wiring for DotNext cluster, not working due to the above
+app.UseConsensusProtocolHandler();
 
-//await app.RestoreStateAsync<TokenBucketStateMachine>();
+await app.RestoreStateAsync<TokenBucketStateMachine>();
 
-//app.MapGet("/rules", (IndexPriorityTokenBucketManager manager) =>
-//{
-//    return Results.Ok(manager.GetAllRules());
-//});
+app.MapGet("/rules", (IndexPriorityTokenBucketManager manager) =>
+{
+    return Results.Ok(manager.GetAllRules());
+});
 
-//app.MapPost("/rules", async (IndexRateLimitRule rule, IndexPriorityTokenBucketManager tbManager, IRaftCluster cluster) =>
-//{
-//    tbManager.ApplyRule(rule);
+app.MapPost("/rules", async (IndexRateLimitRule rule, IndexPriorityTokenBucketManager tbManager, IRaftCluster cluster) =>
+{
+    tbManager.ApplyRule(rule);
 
-//    // Replicate to cluster
-//    var entry = RateLimitLogEntry.CreateUpdateRule(rule);
+    // Replicate to cluster
+    var entry = RateLimitLogEntry.CreateUpdateRule(rule);
 
-//    return Results.Ok(new { message = "Rule saved and applied successfully", rule });
-//});
-
+    return Results.Ok(new { message = "Rule saved and applied successfully", rule });
+});
+*/
 app.MapGet("/", () => "Running!");
 
 
