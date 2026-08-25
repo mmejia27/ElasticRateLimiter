@@ -6,4 +6,8 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
 
+  <ItemGroup>
+    <PackageReference Include="DotNext.Net.Cluster" Version="6.6.4" />
+  </ItemGroup>
+
 </Project>
