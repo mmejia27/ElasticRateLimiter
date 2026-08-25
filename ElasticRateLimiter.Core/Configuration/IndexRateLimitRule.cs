@@ -18,7 +18,7 @@ namespace ElasticRateLimiter.Core.Configuration
         public bool WriteIsUnlimited { get; set; } = true;
 
         // Priority & Headroom Settings
-        public int ReservedPriorityTokens { get; set; } = 20;
+        public int ReservedTokens { get; set; } = 20;
         public int QueueTimeoutMs { get; set; } = 500;
 
         public DateTime LastUpdatedUtc { get; set; } = DateTime.UtcNow;

@@ -32,7 +32,7 @@ namespace ElasticRateLimiter.Core.RateLimiting
                 WriteCapacity = long.MaxValue,
                 WriteRefillRatePerSecond = int.MaxValue,
                 WriteIsUnlimited = true,
-                ReservedPriorityTokens = 20,
+                ReservedTokens = 20,
                 QueueTimeoutMs = 500
             };
             ApplyRule(defaultRule);
@@ -52,11 +52,11 @@ namespace ElasticRateLimiter.Core.RateLimiting
             _rules[pattern] = rule;
 
             var (readBucket, writeBucket) = _buckets.GetOrAdd(pattern, p => (
-                new TokenBucket(_clusterSizeProvider, rule.ReadCapacity, rule.ReadRefillRatePerSecond, rule.ReservedPriorityTokens, false),
+                new TokenBucket(_clusterSizeProvider, rule.ReadCapacity, rule.ReadRefillRatePerSecond, rule.ReservedTokens, false),
                 new TokenBucket(_clusterSizeProvider, rule.WriteCapacity, rule.WriteRefillRatePerSecond, 0, rule.WriteIsUnlimited)
             ));
 
-            readBucket.UpdateConfiguration(rule.ReadCapacity, rule.ReadRefillRatePerSecond, rule.ReservedPriorityTokens, false);
+            readBucket.UpdateConfiguration(rule.ReadCapacity, rule.ReadRefillRatePerSecond, rule.ReservedTokens, false);
             writeBucket.UpdateConfiguration(rule.WriteCapacity, rule.WriteRefillRatePerSecond, 0, rule.WriteIsUnlimited);
         }
 
@@ -193,7 +193,7 @@ namespace ElasticRateLimiter.Core.RateLimiting
                 if (_rules.TryGetValue(idx, out var exactRule))
                 {
                     return (
-                        new TokenBucket(_clusterSizeProvider, exactRule.ReadCapacity, exactRule.ReadRefillRatePerSecond, exactRule.ReservedPriorityTokens, false),
+                        new TokenBucket(_clusterSizeProvider, exactRule.ReadCapacity, exactRule.ReadRefillRatePerSecond, exactRule.ReservedTokens, false),
                         new TokenBucket(_clusterSizeProvider, exactRule.WriteCapacity, exactRule.WriteRefillRatePerSecond, 0, exactRule.WriteIsUnlimited)
                     );
                 }
@@ -201,7 +201,7 @@ namespace ElasticRateLimiter.Core.RateLimiting
                 // Fallback to _default rule
                 var defaultRule = _rules.GetValueOrDefault("_default") ?? new IndexRateLimitRule();
                 return (
-                    new TokenBucket(_clusterSizeProvider, defaultRule.ReadCapacity, defaultRule.ReadRefillRatePerSecond, defaultRule.ReservedPriorityTokens, false),
+                    new TokenBucket(_clusterSizeProvider, defaultRule.ReadCapacity, defaultRule.ReadRefillRatePerSecond, defaultRule.ReservedTokens, false),
                     new TokenBucket(_clusterSizeProvider, defaultRule.WriteCapacity, defaultRule.WriteRefillRatePerSecond, 0, defaultRule.WriteIsUnlimited)
                 );
             });

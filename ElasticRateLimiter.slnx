@@ -1,5 +1,9 @@
 <Solution>
+  <Folder Name="/tests/">
+    <Project Path="tests/ElasticRateLimiter.Tests/ElasticRateLimiter.Tests.csproj" />
+  </Folder>
   <Project Path="ElasticRateLimiter.Core/ElasticRateLimiter.Core.csproj" />
+  <Project Path="ElasticRateLimiter.Middleware/ElasticRateLimiter.Middleware.csproj" />
   <Project Path="ElasticRateLimiter.Raft/ElasticRateLimiter.Raft.csproj" />
   <Project Path="ElasticRateLimiter.Server/ElasticRateLimiter.Server.csproj" />
 </Solution>

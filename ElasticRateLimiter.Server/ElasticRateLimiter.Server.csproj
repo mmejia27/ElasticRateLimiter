@@ -9,6 +9,9 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="DotNext.AspNetCore.Cluster" Version="6.6.4" />
+    <PackageReference Include="DotNext.Net.Cluster" Version="6.6.4" />
+    <PackageReference Include="Microsoft.Data.Sqlite.Core" Version="10.0.11" />
     <PackageReference Include="Microsoft.VisualStudio.Azure.Containers.Tools.Targets" Version="1.24.1-preview.1" />
     <PackageReference Include="OpenTelemetry" Version="1.18.0" />
     <PackageReference Include="OpenTelemetry.Exporter.Console" Version="1.18.0" />
@@ -20,6 +23,8 @@
 
   <ItemGroup>
     <ProjectReference Include="..\ElasticRateLimiter.Core\ElasticRateLimiter.Core.csproj" />
+    <ProjectReference Include="..\ElasticRateLimiter.Middleware\ElasticRateLimiter.Middleware.csproj" />
+    <ProjectReference Include="..\ElasticRateLimiter.Raft\ElasticRateLimiter.Raft.csproj" />
   </ItemGroup>
 
 </Project>
