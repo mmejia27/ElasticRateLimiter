@@ -22,7 +22,7 @@ namespace ElasticRateLimiter.Core.RateLimiting
         public long RequiredTokens { get; set; }
         public string TargetIndices { get; set; } = string.Empty;
 
-        public static RateLimitResult Success(int requiredTokens, long remaining, int durationMs, string indices) =>
+        public static RateLimitResult Success(long requiredTokens, long remaining, int durationMs, string indices) =>
             new()
             {
                 IsAllowed = true,

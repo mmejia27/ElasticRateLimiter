@@ -10,4 +10,8 @@
     <PackageReference Include="DotNext.Net.Cluster" Version="6.6.4" />
   </ItemGroup>
 
+  <ItemGroup>
+    <ProjectReference Include="..\ElasticRateLimiter.Core\ElasticRateLimiter.Core.csproj" />
+  </ItemGroup>
+
 </Project>
