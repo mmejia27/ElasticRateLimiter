@@ -1,6 +1,7 @@
 ﻿using DotNext.IO;
 using DotNext.Net.Cluster.Consensus.Raft.StateMachine;
 using ElasticRateLimiter.Core.Configuration;
+using ElasticRateLimiter.Core.RateLimiting;
 using Microsoft.Extensions.Logging;
 using System;
 using System.Collections.Generic;
@@ -11,9 +12,11 @@ namespace ElasticRateLimiter.Raft
 {
     public class TokenBucketStateMachine : SimpleStateMachine
     {
+        private readonly IndexPriorityTokenBucketManager _tokenBucketManager;
         private readonly ILogger<TokenBucketStateMachine> _logger;
-        public TokenBucketStateMachine(string path, ILogger<TokenBucketStateMachine> logger) : base(new(path))
+        public TokenBucketStateMachine(string path, IndexPriorityTokenBucketManager tokenBucketManager, ILogger<TokenBucketStateMachine> logger) : base(new(path))
         {
+            _tokenBucketManager = tokenBucketManager;
             _logger = logger;
         }
 
@@ -32,7 +35,7 @@ namespace ElasticRateLimiter.Raft
                     var rule = JsonSerializer.Deserialize<IndexRateLimitRule>(command.PayloadJson);
                     if (rule != null)
                     {
-                        // TODO: Apply rule here
+                        _tokenBucketManager.ApplyRule(rule);
                         _logger.LogInformation("Applied rule for index {IndexName}", rule.IndexPattern);
                     }
                 }
@@ -44,14 +47,29 @@ namespace ElasticRateLimiter.Raft
             return false;
         }
 
-        protected override ValueTask PersistAsync(IAsyncBinaryWriter writer, CancellationToken token)
+        protected override async ValueTask PersistAsync(IAsyncBinaryWriter writer, CancellationToken token)
         {
-            throw new NotImplementedException();
+            var rules = _tokenBucketManager.GetAllRules();
+            var jsonBytes = JsonSerializer.SerializeToUtf8Bytes(rules);
+            await writer.WriteAsync(jsonBytes, null, token);
         }
 
-        protected override ValueTask RestoreAsync(FileInfo snapshotFile, CancellationToken token)
+        protected override async ValueTask RestoreAsync(FileInfo snapshotFile, CancellationToken token)
         {
-            throw new NotImplementedException();
+            if (!snapshotFile.Exists || snapshotFile.Length == 0)
+                return;
+
+            var jsonBytes = await File.ReadAllBytesAsync(snapshotFile.FullName, token);
+            var rules = JsonSerializer.Deserialize<IEnumerable<IndexRateLimitRule>>(jsonBytes);
+
+            if (rules != null)
+            {
+                foreach (var rule in rules)
+                {
+                    _tokenBucketManager.ApplyRule(rule);
+                }
+                _logger.LogInformation("Restored {RuleCount} rules from Raft snapshot", rules.Count());
+            }
         }
     }
 }
