@@ -14,7 +14,7 @@ namespace ElasticRateLimiter.Raft
     {
         private readonly IndexPriorityTokenBucketManager _tokenBucketManager;
         private readonly ILogger<TokenBucketStateMachine> _logger;
-        public TokenBucketStateMachine(string path, IndexPriorityTokenBucketManager tokenBucketManager, ILogger<TokenBucketStateMachine> logger) : base(new(path))
+        public TokenBucketStateMachine(TokenBucketStateMachineOptions options, IndexPriorityTokenBucketManager tokenBucketManager, ILogger<TokenBucketStateMachine> logger) : base(new DirectoryInfo(options.SnapshotDirectory))
         {
             _tokenBucketManager = tokenBucketManager;
             _logger = logger;
@@ -22,7 +22,7 @@ namespace ElasticRateLimiter.Raft
 
         protected override async ValueTask<bool> ApplyAsync(LogEntry entry, CancellationToken token)
         {
-            if (entry.Length == 0) return false;
+            if (entry.IsConfiguration || entry.Length is null or 0L) return false;
 
             var bytes = await entry.ToByteArrayAsync();
             var payload = System.Text.Encoding.UTF8.GetString(bytes);
@@ -37,6 +37,8 @@ namespace ElasticRateLimiter.Raft
                     {
                         _tokenBucketManager.ApplyRule(rule);
                         _logger.LogInformation("Applied rule for index {IndexName}", rule.IndexPattern);
+
+                        return true;
                     }
                 }
             }

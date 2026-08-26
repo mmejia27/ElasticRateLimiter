@@ -25,7 +25,8 @@ namespace ElasticRateLimiter.Tests
             Directory.CreateDirectory(path);
             try
             {
-                await using var stateMachine = new TokenBucketStateMachine(path, tbManager, logger);
+                await using var stateMachine = new TokenBucketStateMachine(
+                    new TokenBucketStateMachineOptions(path), tbManager, logger);
                 Assert.NotNull(stateMachine);
             }
             finally

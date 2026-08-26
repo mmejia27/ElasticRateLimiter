@@ -2,6 +2,7 @@ using DotNext;
 using DotNext.Net.Cluster;
 using DotNext.Net.Cluster.Consensus.Raft;
 using DotNext.Net.Cluster.Consensus.Raft.Http;
+using DotNext.Net.Cluster.Consensus.Raft.StateMachine;
 using ElasticRateLimiter.Core.Configuration;
 using ElasticRateLimiter.Core.Diagnostics;
 using ElasticRateLimiter.Core.RateLimiting;
@@ -47,38 +48,45 @@ builder.Services.AddSingleton<IndexPriorityTokenBucketManager>(sp =>
     });
 });
 
-builder.Services.AddSingleton<TokenBucketStateMachine>(sp =>
+
+var walOptions = new WriteAheadLog.Options
 {
-    var manager = sp.GetRequiredService<IndexPriorityTokenBucketManager>();
-    var logger = sp.GetRequiredService<ILogger<TokenBucketStateMachine>>();
-    return new TokenBucketStateMachine(statePath, manager, logger);
-});
-/* Cannot register the state machine due to it not implementing IPersistentState and documentation is sparse
-builder.Services.AddSingleton<IPersistentState>(sp => sp.GetRequiredService<TokenBucketStateMachine>());
-builder.Host.JoinCluster();
-*/
+    Location = statePath,
+};
+
+builder.Services.AddSingleton(new TokenBucketStateMachineOptions(Path.Combine(statePath, "snapshot")));
+builder.Services.UseStateMachine<TokenBucketStateMachine>(walOptions);
+builder.Services.UsePersistentConfigurationStorage(Path.Combine(statePath, "members"));
+
+builder.Host.JoinCluster("raft");
+
 var app = builder.Build();
 
-/* Part of the wiring for DotNext cluster, not working due to the above
-app.UseConsensusProtocolHandler();
-
 await app.RestoreStateAsync<TokenBucketStateMachine>();
+
+app.UseConsensusProtocolHandler();
 
 app.MapGet("/rules", (IndexPriorityTokenBucketManager manager) =>
 {
     return Results.Ok(manager.GetAllRules());
 });
 
-app.MapPost("/rules", async (IndexRateLimitRule rule, IndexPriorityTokenBucketManager tbManager, IRaftCluster cluster) =>
+app.MapPost("/rules", async (IndexRateLimitRule rule, IRaftCluster cluster, CancellationToken token) =>
 {
-    tbManager.ApplyRule(rule);
+    // Only the leader may append to the Raft log.
+    if (cluster.Leader is not { IsRemote: false })
+    {
+        return Results.Problem(
+            detail: $"This node is not the Raft leader. Current leader: {cluster.Leader?.EndPoint.ToString() ?? "unknown"}.",
+            statusCode: StatusCodes.Status503ServiceUnavailable);
+    }
 
-    // Replicate to cluster
     var entry = RateLimitLogEntry.CreateUpdateRule(rule);
+    await cluster.ReplicateAsync(entry.ToUtf8Bytes(), token: token);
 
-    return Results.Ok(new { message = "Rule saved and applied successfully", rule });
+    return Results.Ok(new { message = "Rule replicated and applied successfully", rule });
 });
-*/
+
 app.MapGet("/", () => "Running!");
 
 

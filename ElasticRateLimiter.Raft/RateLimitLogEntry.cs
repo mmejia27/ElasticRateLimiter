@@ -20,5 +20,7 @@ namespace ElasticRateLimiter.Raft
                 PayloadJson = JsonSerializer.Serialize(rule)
             };
         }
+
+        public ReadOnlyMemory<byte> ToUtf8Bytes() => JsonSerializer.SerializeToUtf8Bytes(this);
     }
 }

@@ -2,10 +2,30 @@
 
 # This stage is used when running from VS in fast mode (Default for Debug configuration)
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS base
-USER $APP_UID
 WORKDIR /app
 EXPOSE 8080
 EXPOSE 8081
+
+# Raft persists its write-ahead log, snapshots, and member list to disk. /app is root-owned, so a
+# non-root process cannot create a state directory there. Give the app a directory it owns.
+#
+# VOLUME keeps that state off the container's writable layer, but it does NOT by itself survive
+# the container being replaced. To keep state across container replacement, mount a named volume
+# over this path:
+#     docker run -v erl-state:/var/lib/elasticratelimiter ...
+
+ENV Raft__StateDir=/var/lib/elasticratelimiter
+RUN mkdir -p /var/lib/elasticratelimiter && chown -R $APP_UID /var/lib/elasticratelimiter
+VOLUME /var/lib/elasticratelimiter
+
+# The address this node advertises to its peers. The default matches the container's own HTTP
+# port so a single-node `docker run` works unattended. A multi-node cluster MUST override this
+# per node with an address the other nodes can actually reach, and set Raft__ColdStart=false on
+# every node except the one that bootstraps the cluster.
+ENV Raft__PublicEndPoint=http://localhost:8080
+ENV Raft__ColdStart=true
+
+USER $APP_UID
 
 
 # This stage is used to build the service project
