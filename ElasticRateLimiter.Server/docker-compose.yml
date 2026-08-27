@@ -1,0 +1,139 @@
+# Three-node Raft cluster demo. Nodes are published on localhost:8081, :8082 and :8083.
+#
+# Nodes join the cluster on their own - only node1 is named anywhere in this file:
+#
+#   node1  Raft__ColdStart=true    bootstraps the cluster and becomes the first leader.
+#   node2  Raft__ColdStart=false   announces itself to Raft__Seeds and is admitted by the leader.
+#   node3  Raft__ColdStart=false   same. It does not need to know about node2, only a seed.
+#
+# Raft__Seeds is still required: autojoin means a node does not need the *full* member list, not
+# that it can find the cluster from nothing - there is no broadcast discovery. A node with no seeds
+# and no persisted membership stays stranded with zero members forever. It is only needed for the
+# first join though; afterwards membership is on the node's volume, so a restarted node rejoins on
+# its own even if every seed is down.
+#
+# A joining node waits until it is serving, then POSTs its own address to a seed's /cluster/members.
+# The seed forwards to the leader, which appends a configuration entry; that entry replicates like
+# any other, so every node converges on the same membership. Membership is persisted next to the
+# log, so a node that has joined once remembers its peers across restarts - which is why node1 can
+# be restarted with ColdStart=true without splitting the cluster.
+#
+# Raft__PublicEndPoint is the address a node advertises to its peers, so it must be reachable from
+# the other containers; on the compose network that is the service name, not localhost.
+#
+#   docker compose up --build -d
+#
+#   # 1. Watch the cluster assemble - all three report the same leader and three members.
+#   curl -s localhost:8081/cluster
+#
+#   # 2. Writes are leader-only. A POST to a follower is rejected with 503 naming the leader.
+#   #    Which node is leader is not fixed, so read it out of /cluster rather than assuming.
+#   curl -s -XPOST localhost:8082/rules -H 'content-type: application/json' \
+#        -d '{"indexPattern":"demo-idx","readCapacity":4242}'
+#
+#   # 3. POST to the leader, then read /rules from all three - the rule is replicated everywhere.
+#   curl -s localhost:8081/rules; curl -s localhost:8082/rules; curl -s localhost:8083/rules
+#
+#   # 4. Failover: stop the leader and the survivors elect a new one in a higher term and keep
+#   #    accepting writes at 2/3 quorum. Restart it and it catches up on what it missed.
+#   docker compose stop node1
+#   docker compose start node1
+#
+#   # 5. Scale out - node4 joins a running cluster with no change to the other three.
+#   docker compose --profile scale up -d node4
+#   curl -s localhost:8084/cluster
+#
+#   docker compose down -v             stop and discard the replicated state
+#
+# Run these from this directory, or from anywhere with:
+#   docker compose -f ElasticRateLimiter.Server/docker-compose.yml <command>
+
+# Pinned so the network and volumes keep stable names regardless of which directory this file
+# lives in - otherwise Compose derives the project name from the containing folder.
+name: elasticratelimiter
+
+x-node: &node
+  build:
+    # The build context is the repository root, not this directory: the Dockerfile copies every
+    # project (Core, Middleware, Raft, Server) and the .dockerignore lives at the root too.
+    context: ..
+    dockerfile: ElasticRateLimiter.Server/Dockerfile
+  environment: &node-env
+    ASPNETCORE_HTTP_PORTS: "8080"
+    # Telemetry exporters are off by default (see appsettings.json). Set Telemetry__Console=true
+    # to dump traces and metrics to stdout, or Telemetry__OtlpEndpoint to ship them to a collector.
+  networks: [raft]
+  restart: unless-stopped
+
+services:
+  node1:
+    <<: *node
+    container_name: erl-node1
+    hostname: node1
+    environment:
+      <<: *node-env
+      Raft__PublicEndPoint: "http://node1:8080"
+      # Exactly one node may cold-start, otherwise you get two separate one-node clusters.
+      Raft__ColdStart: "true"
+    ports:
+      - "8081:8080"
+    volumes:
+      - node1-state:/var/lib/elasticratelimiter
+
+  node2:
+    <<: *node
+    container_name: erl-node2
+    hostname: node2
+    environment:
+      <<: *node-env
+      Raft__PublicEndPoint: "http://node2:8080"
+      Raft__ColdStart: "false"
+      Raft__Seeds: "http://node1:8080"
+    ports:
+      - "8082:8080"
+    volumes:
+      - node2-state:/var/lib/elasticratelimiter
+    depends_on: [node1]
+
+  node3:
+    <<: *node
+    container_name: erl-node3
+    hostname: node3
+    environment:
+      <<: *node-env
+      Raft__PublicEndPoint: "http://node3:8080"
+      Raft__ColdStart: "false"
+      # More than one seed can be listed; whichever answers first is used, and a seed that is not
+      # the leader hands back the leader's address to retry against.
+      Raft__Seeds: "http://node1:8080,http://node2:8080"
+    ports:
+      - "8083:8080"
+    volumes:
+      - node3-state:/var/lib/elasticratelimiter
+    depends_on: [node1]
+
+  # Not started by default. Demonstrates that joining needs no change to the running cluster:
+  #   docker compose --profile scale up -d node4
+  node4:
+    <<: *node
+    container_name: erl-node4
+    hostname: node4
+    profiles: [scale]
+    environment:
+      <<: *node-env
+      Raft__PublicEndPoint: "http://node4:8080"
+      Raft__ColdStart: "false"
+      Raft__Seeds: "http://node1:8080,http://node2:8080,http://node3:8080"
+    ports:
+      - "8084:8080"
+    volumes:
+      - node4-state:/var/lib/elasticratelimiter
+
+networks:
+  raft:
+
+volumes:
+  node1-state:
+  node2-state:
+  node3-state:
+  node4-state:
