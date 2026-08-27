@@ -23,14 +23,18 @@ namespace ElasticRateLimiter.Core.RateLimiting
 
         public void UpdateConfiguration(long capacity, int refillRate, int reservedTokens, bool isUnlimited)
         {
-            _baseCapacity = capacity;
-            _baseRefillRate = refillRate;
-            _baseReservedTokens = reservedTokens;
-            IsUnlimited = isUnlimited;
-            if (_availableTokens > capacity && !isUnlimited)
+
+            using (SyncRoot.EnterScope())
             {
-                _availableTokens = capacity;
-                _lastRefillUtc = DateTime.UtcNow;
+                _baseCapacity = capacity;
+                _baseRefillRate = refillRate;
+                _baseReservedTokens = reservedTokens;
+                IsUnlimited = isUnlimited;
+                if (_availableTokens > capacity && !isUnlimited)
+                {
+                    _availableTokens = capacity;
+                    _lastRefillUtc = DateTime.UtcNow;
+                }
             }
         }
 
@@ -98,7 +102,6 @@ namespace ElasticRateLimiter.Core.RateLimiting
 
         public bool TryConsume(long requiredTokens, QueryPriority priority, out long remainingTokens, out string reason)
         {
-
             using (SyncRoot.EnterScope())
             {
                 if (IsUnlimited)
