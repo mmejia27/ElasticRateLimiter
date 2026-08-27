@@ -27,12 +27,12 @@ namespace ElasticRateLimiter.Core.RateLimiting
             var defaultRule = new IndexRateLimitRule
             {
                 IndexPattern = "_default",
-                ReadCapacity = 100,
-                ReadRefillRatePerSecond = 5,
+                ReadCapacity = 1000,
+                ReadRefillRatePerSecond = 50,
                 WriteCapacity = long.MaxValue,
                 WriteRefillRatePerSecond = int.MaxValue,
                 WriteIsUnlimited = true,
-                ReservedTokens = 20,
+                ReservedTokens = 50,
                 QueueTimeoutMs = 500
             };
             ApplyRule(defaultRule);

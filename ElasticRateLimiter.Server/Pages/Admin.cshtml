@@ -1,0 +1,149 @@
+@page "/admin"
+@model ElasticRateLimiter.Server.Pages.AdminModel
+@{
+    Layout = null;
+}
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Rate limit rules</title>
+    <style>
+        body { font: 14px/1.5 system-ui, sans-serif; margin: 2rem auto; max-width: 60rem; padding: 0 1rem; }
+        h1 { font-size: 1.3rem; margin-bottom: .25rem; }
+        .meta { color: #666; margin-bottom: 1.5rem; }
+        .banner { padding: .6rem .8rem; border-radius: 4px; margin-bottom: 1rem; }
+        .ok { background: #e6f5e6; border: 1px solid #9c9; }
+        .err { background: #fdeaea; border: 1px solid #d99; }
+        fieldset { border: 1px solid #ccc; border-radius: 4px; margin-bottom: 1rem; padding: .8rem 1rem 1rem; }
+        legend { font-weight: 600; padding: 0 .4rem; }
+        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr)); gap: .6rem 1rem; }
+        label { display: block; font-size: .8rem; color: #555; }
+        input[type=number] { width: 100%; box-sizing: border-box; padding: .3rem; }
+        .row { margin-top: .8rem; display: flex; align-items: center; gap: 1rem; }
+        button { padding: .35rem 1rem; cursor: pointer; }
+        input[type=text] { width: 100%; box-sizing: border-box; padding: .3rem; }
+        .add { border-color: #99b; background: #f7f7fc; }
+        .add .pattern { grid-column: 1 / -1; }
+    </style>
+</head>
+<body>
+    <h1>Rate limit rules</h1>
+
+    <p class="meta">
+        @if (Model.ThisNodeIsLeader)
+        {
+            <text>This node is the leader; saves are replicated from here.</text>
+        }
+        else
+        {
+            <text>This node is a follower; saves are forwarded to the leader (@(Model.LeaderAddress ?? "unknown")).</text>
+        }
+        Rules are replicated to every node. Token buckets are per node.
+    </p>
+
+    @if (!string.IsNullOrEmpty(Model.Message))
+    {
+        <div class="banner @(Model.IsError ? "err" : "ok")">@Model.Message</div>
+    }
+
+    @if (Model.Rules.Count == 0)
+    {
+        <p>No rules yet.</p>
+    }
+
+    @foreach (var rule in Model.Rules)
+    {
+        var scope = ElasticRateLimiter.Server.Pages.AdminModel.IdScope(rule.IndexPattern);
+
+        <form method="post">
+            <fieldset>
+                <legend>@rule.IndexPattern</legend>
+                <input type="hidden" name="Input.IndexPattern" value="@rule.IndexPattern">
+                <div class="grid">
+                    <div>
+                        <label for="@(scope)-readCapacity">Read capacity</label>
+                        <input type="number" id="@(scope)-readCapacity" name="Input.ReadCapacity" value="@rule.ReadCapacity" min="0" step="1">
+                    </div>
+                    <div>
+                        <label for="@(scope)-readRefill">Read refill / sec</label>
+                        <input type="number" id="@(scope)-readRefill" name="Input.ReadRefillRatePerSecond" value="@rule.ReadRefillRatePerSecond" min="0" step="1">
+                    </div>
+                    <div>
+                        <label for="@(scope)-reserved">Reserved tokens</label>
+                        <input type="number" id="@(scope)-reserved" name="Input.ReservedTokens" value="@rule.ReservedTokens" min="0" step="1">
+                    </div>
+                    <div>
+                        <label for="@(scope)-queueTimeout">Queue timeout (ms)</label>
+                        <input type="number" id="@(scope)-queueTimeout" name="Input.QueueTimeoutMs" value="@rule.QueueTimeoutMs" min="0" step="1">
+                    </div>
+                    <div>
+                        <label for="@(scope)-writeCapacity">Write capacity</label>
+                        <input type="number" id="@(scope)-writeCapacity" name="Input.WriteCapacity" value="@rule.WriteCapacity" min="0" step="1">
+                    </div>
+                    <div>
+                        <label for="@(scope)-writeRefill">Write refill / sec</label>
+                        <input type="number" id="@(scope)-writeRefill" name="Input.WriteRefillRatePerSecond" value="@rule.WriteRefillRatePerSecond" min="0" step="1">
+                    </div>
+                </div>
+                <div class="row">
+                    @* The hidden false pairs with the checkbox so unticking it actually posts false. *@
+                    <label>
+                        <input type="checkbox" name="Input.WriteIsUnlimited" value="true" @(rule.WriteIsUnlimited ? "checked" : null)>
+                        <input type="hidden" name="Input.WriteIsUnlimited" value="false">
+                        Writes unlimited
+                    </label>
+                    <button type="submit">Save @rule.IndexPattern</button>
+                </div>
+            </fieldset>
+        </form>
+    }
+
+    <form method="post" asp-page-handler="Add">
+        <fieldset class="add">
+            <legend>Add a rule</legend>
+            <div class="grid">
+                <div class="pattern">
+                    <label for="new-indexPattern">Index pattern</label>
+                    <input type="text" id="new-indexPattern" name="Input.IndexPattern" value="" placeholder="logs-*" required>
+                </div>
+                <div>
+                    <label for="new-readCapacity">Read capacity</label>
+                    <input type="number" id="new-readCapacity" name="Input.ReadCapacity" value="@Model.Input.ReadCapacity" min="0" step="1">
+                </div>
+                <div>
+                    <label for="new-readRefill">Read refill / sec</label>
+                    <input type="number" id="new-readRefill" name="Input.ReadRefillRatePerSecond" value="@Model.Input.ReadRefillRatePerSecond" min="0" step="1">
+                </div>
+                <div>
+                    <label for="new-reserved">Reserved tokens</label>
+                    <input type="number" id="new-reserved" name="Input.ReservedTokens" value="@Model.Input.ReservedTokens" min="0" step="1">
+                </div>
+                <div>
+                    <label for="new-queueTimeout">Queue timeout (ms)</label>
+                    <input type="number" id="new-queueTimeout" name="Input.QueueTimeoutMs" value="@Model.Input.QueueTimeoutMs" min="0" step="1">
+                </div>
+                <div>
+                    <label for="new-writeCapacity">Write capacity</label>
+                    <input type="number" id="new-writeCapacity" name="Input.WriteCapacity" value="@Model.Input.WriteCapacity" min="0" step="1">
+                </div>
+                <div>
+                    <label for="new-writeRefill">Write refill / sec</label>
+                    <input type="number" id="new-writeRefill" name="Input.WriteRefillRatePerSecond" value="@Model.Input.WriteRefillRatePerSecond" min="0" step="1">
+                </div>
+            </div>
+            <div class="row">
+                <label>
+                    <input type="checkbox" name="Input.WriteIsUnlimited" value="true" @(Model.Input.WriteIsUnlimited ? "checked" : null)>
+                    <input type="hidden" name="Input.WriteIsUnlimited" value="false">
+                    Writes unlimited
+                </label>
+                <button type="submit">Add rule</button>
+            </div>
+        </fieldset>
+    </form>
+
+    <p class="meta">Saving a rule replicates it through Raft; every node applies it.</p>
+</body>
+</html>

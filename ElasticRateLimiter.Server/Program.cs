@@ -55,14 +55,19 @@ builder.Services.AddOpenTelemetry()
 
 var statePath = builder.Configuration["Raft:StateDir"] ?? Path.Combine(builder.Environment.ContentRootPath, "raft-state");
 
-builder.Services.AddSingleton<IndexPriorityTokenBucketManager>(sp =>
+// Registers the cost estimator, index extractor and the IndexPriorityTokenBucketManager that both
+// the middleware and the Raft state machine share. Rules are replicated through Raft; the token
+// buckets themselves are per-node, and their capacity is divided by the cluster size.
+builder.Services.AddElasticsearchRateLimiter(options =>
 {
-    return new IndexPriorityTokenBucketManager(() =>
-    {
-        var cluster = sp.GetService<IRaftCluster>();
-        return cluster?.Members.Count ?? 1;
-    });
+    // With the reverse proxy disabled the request falls through to the stub _search endpoint below,
+    // so the limiter can be exercised without a real Elasticsearch behind it.
+    options.EnableReverseProxy = builder.Configuration.GetValue("Elasticsearch:EnableReverseProxy", false);
+    options.ElasticsearchTargetUrl = builder.Configuration["Elasticsearch:TargetUrl"] ?? "http://localhost:9200";
 });
+
+// The demo admin page at /admin is a Razor Page (Pages/Admin.cshtml).
+builder.Services.AddRazorPages();
 
 
 var walOptions = new WriteAheadLog.Options
@@ -101,6 +106,14 @@ var app = builder.Build();
 await app.RestoreStateAsync<TokenBucketStateMachine>();
 
 app.UseConsensusProtocolHandler();
+
+// Rate limit Elasticsearch traffic only. The control plane (/rules, /cluster, /) must stay
+// reachable even when the buckets are empty
+string[] controlPlane = ["/rules", "/cluster", "/admin"];
+app.UseWhen(
+    context => context.Request.Path != "/"
+        && !controlPlane.Any(prefix => context.Request.Path.StartsWithSegments(prefix)),
+    elasticsearch => elasticsearch.UseElasticsearchRateLimiter());
 
 app.MapGet("/rules", (IndexPriorityTokenBucketManager manager) =>
 {
@@ -165,6 +178,25 @@ app.MapGet("/cluster", (IRaftCluster cluster) => Results.Ok(new
         status = m.Status.ToString()
     })
 }));
+
+// Stand-in for Elasticsearch so the limiter can be exercised without one. Requests only reach this
+// once the rate limiter has allowed them, so a 200 here means tokens were granted. Set
+// Elasticsearch:EnableReverseProxy=true and Elasticsearch:TargetUrl to forward to a real cluster.
+app.MapMethods("/{index}/_search", ["GET", "POST"], (string index) => Results.Json(new
+{
+    took = 1,
+    timed_out = false,
+    _shards = new { total = 1, successful = 1, skipped = 0, failed = 0 },
+    hits = new
+    {
+        total = new { value = 0, relation = "eq" },
+        max_score = (double?)null,
+        hits = Array.Empty<object>()
+    },
+    _stub = new { index, note = "Synthetic response from ElasticRateLimiter; no Elasticsearch involved." }
+}));
+
+app.MapRazorPages();
 
 app.MapGet("/", () => "Running!");
 
